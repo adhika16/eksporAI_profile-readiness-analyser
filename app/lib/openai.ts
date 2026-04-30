@@ -1,8 +1,7 @@
 import { AnalysisResult, GitHubData } from '../types/analysis';
 
-// Mock implementation for development
-// Replace with actual Azure OpenAI API calls when credentials are available
-export async function analyzeProfiles(
+// Mock implementation for development fallback
+export async function analyzeProfilesMock(
   linkedinText: string,
   githubData: GitHubData
 ): Promise<AnalysisResult> {
@@ -359,8 +358,93 @@ function generateRoadmap() {
   ];
 }
 
-// Real Azure OpenAI implementation (for later use)
-/*
+// Full system prompt from technical-reqs.md Section 9
+const SYSTEM_PROMPT = `You are EksporAI Coach, an expert career coach specialized in helping Indonesian digital professionals export their services to global clients on platforms like Upwork, Toptal, and direct contracts.
+
+Your goal is to analyze a freelancer's LinkedIn profile (provided as extracted text from PDF) and GitHub profile data, then provide an honest, constructive, and actionable assessment.
+
+Context:
+- Most Indonesian talents are technically strong but often use modest language, have grammatical issues in English, and focus too much on technical details instead of client benefits.
+- Global clients value clarity, confidence, quantifiable results, and problem-solving ability.
+
+SCORING RUBRIC - Apply these objective criteria:
+
+**Technical Strength & Portfolio Quality (30%):**
+- 90-100: Detailed READMEs (>150 words), modern tech stack, 5+ quality projects, clean code, active participation
+- 70-89: Decent READMEs, mix of modern/legacy tech, 3-5 projects, acceptable organization
+- 50-69: Basic READMEs, mostly tutorial projects, <3 substantial projects
+- <50: Minimal READMEs, outdated tech, <2 projects, poor organization
+
+**Communication & English Proficiency (25%):**
+- 90-100: Native-level English, no errors, client-benefit focus, quantified achievements ("increased performance by 40%")
+- 70-89: Good English with minor errors, some client focus, few quantified results
+- 50-69: Awkward phrasing, jargon-heavy, no quantified results, modest language
+- <50: Poor grammar, unclear explanations, broken English
+
+**Market Demand Alignment (20%):**
+- 90-100: Skills in AI/ML, Full-stack, Cloud (top demand), certifications, trending tech
+- 70-89: Skills in Mobile, Backend, UI/UX (good demand), some modern tech
+- 50-69: Mixed demand, outdated but usable technologies
+- <50: Niche/declining technologies, no global market alignment
+
+**Professional Presentation (15%):**
+- 90-100: Complete profile, keyword-optimized, achievement-focused, professional
+- 70-89: Mostly complete, some optimization, professional tone
+- 50-69: Incomplete sections, generic descriptions
+- <50: Major gaps, unprofessional presentation
+
+**Activity & Consistency (10%):**
+- 90-100: Consistent contributions (20+ days/month), recent commits, active learning
+- 70-89: Regular activity (10-20 days/month), commits within month
+- 50-69: Sporadic activity, gaps in history
+- <50: Inactive (>3 months), no recent projects
+
+Analyze the following profile data:
+
+LinkedIn Profile Data (extracted from PDF):
+{linkedin_data}
+
+GitHub Data:
+{github_data}
+
+Perform these tasks in ONE comprehensive analysis:
+1. Score each category (0-100) using the rubric above with specific justification
+2. Calculate weighted overall score (Technical×0.30 + Communication×0.25 + Market×0.20 + Presentation×0.15 + Activity×0.10)
+3. Identify top 3 strengths with specific examples from the data
+4. Identify top 3 weaknesses with actionable improvement suggestions
+5. Generate a highly professional, client-focused LinkedIn "About" section (280-350 words) in native-level English
+6. Suggest realistic hourly rate range in USD based on skill level and market rates
+7. Create a personalized 30-day improvement roadmap with weekly milestones
+8. Generate 3 winning proposal templates tailored to the user's top skills (Web Dev, Mobile, Backend/AI, etc.)
+
+Return ONLY valid JSON with this structure:
+{
+  "overall_score": number,
+  "category_scores": {
+    "technical_strength": number,
+    "communication": number,
+    "market_demand": number,
+    "presentation": number,
+    "activity": number
+  },
+  "scoring_justification": {
+    "technical_strength": "string - internal use only, not displayed to user",
+    "communication": "string - internal use only, not displayed to user",
+    "market_demand": "string - internal use only, not displayed to user",
+    "presentation": "string - internal use only, not displayed to user",
+    "activity": "string - internal use only, not displayed to user"
+  },
+  "strengths": [{"point": "string", "evidence": "string from profile"}],
+  "weaknesses": [{"point": "string", "improvement": "string suggestion"}],
+  "optimized_about": "string (280-350 words)",
+  "recommended_rate": {"min": number, "max": number, "currency": "USD"},
+  "roadmap": [{"week": 1, "focus": "string", "actions": ["string"]}],
+  "proposals": [{"jobType": "string", "proposal": "string"}]
+}
+
+Important: The scoring_justification field is for internal consistency tracking only and should not be displayed in the user interface.`;
+
+// Real Azure OpenAI implementation
 export async function analyzeProfilesReal(
   linkedinText: string,
   githubData: GitHubData
@@ -369,22 +453,90 @@ export async function analyzeProfilesReal(
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
   
-  const response = await fetch(`${endpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey!
-    },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify({ linkedinText, githubData }) }
-      ],
-      temperature: 0.7,
-      max_tokens: 4000
-    })
+  if (!endpoint || !apiKey || !deploymentName) {
+    throw new Error('Azure OpenAI credentials not configured');
+  }
+  
+  const userContent = JSON.stringify({
+    linkedin_data: linkedinText.substring(0, 5000),
+    github_data: githubData
   });
   
-  // Parse and return result
+  // Set timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  
+  try {
+    const response = await fetch(
+      `${endpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userContent }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+          response_format: { type: 'json_object' }
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Azure OpenAI error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('Empty response from Azure OpenAI');
+    }
+    
+    // Parse JSON response
+    const result: AnalysisResult = JSON.parse(content);
+    
+    // Validate required fields
+    if (!result.overall_score || !result.category_scores) {
+      throw new Error('Invalid response structure from Azure OpenAI');
+    }
+    
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 }
-*/
+
+// Main function with fallback
+export async function analyzeProfiles(
+  linkedinText: string,
+  githubData: GitHubData
+): Promise<AnalysisResult> {
+  // Check if we should use real API or mock
+  const useRealApi = process.env.AZURE_OPENAI_ENDPOINT && 
+                     process.env.AZURE_OPENAI_API_KEY &&
+                     process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+  
+  if (useRealApi) {
+    try {
+      console.log('Using real Azure OpenAI...');
+      return await analyzeProfilesReal(linkedinText, githubData);
+    } catch (error) {
+      console.error('Azure OpenAI failed, falling back to mock:', error);
+      // Fall through to mock data
+    }
+  }
+  
+  console.log('Using mock analysis...');
+  return analyzeProfilesMock(linkedinText, githubData);
+}

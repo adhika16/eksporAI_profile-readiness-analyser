@@ -462,9 +462,9 @@ export async function analyzeProfilesReal(
     github_data: githubData
   });
   
-  // Set timeout
+  // Set timeout - Railway supports up to 300s, Azure OpenAI can take 60-120s
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
   
   try {
     const response = await fetch(
@@ -530,11 +530,18 @@ export async function analyzeProfiles(
   if (useRealApi) {
     try {
       console.log('Using real Azure OpenAI...');
+      console.log('Endpoint:', process.env.AZURE_OPENAI_ENDPOINT?.substring(0, 30) + '...');
+      console.log('Deployment:', process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
       return await analyzeProfilesReal(linkedinText, githubData);
     } catch (error) {
       console.error('Azure OpenAI failed, falling back to mock:', error);
       // Fall through to mock data
     }
+  } else {
+    console.log('Azure OpenAI credentials not configured, using mock...');
+    console.log('Endpoint exists:', !!process.env.AZURE_OPENAI_ENDPOINT);
+    console.log('API Key exists:', !!process.env.AZURE_OPENAI_API_KEY);
+    console.log('Deployment exists:', !!process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
   }
   
   console.log('Using mock analysis...');
